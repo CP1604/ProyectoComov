@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import android.app.UiModeManager;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -37,7 +38,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onClick2G(View v){
-        //TO-DO
+        Intent intent=new Intent(this,initActivity.class);
+        startActivity(intent);
     }
 
     public void onClick3G(View v){

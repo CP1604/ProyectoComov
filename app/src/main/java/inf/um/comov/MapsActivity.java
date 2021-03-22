@@ -48,17 +48,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
 
-            } else {
+            }  /* else {
                     ActivityCompat.requestPermissions(this, new String[]{
                             Manifest.permission.ACCESS_FINE_LOCATION
                             }, MY_LOCATION_PERMISSION_FINE);
                 }
             }
+            */
     }
+}
 
     /*
     private void getLastLocatio(FusedLocationProviderClient fusedLocationProviderClient, final Activity activity) {
         fusedLocationProviderClient = LocationClient.getLocationFusedInstance(this );
     }
     */
-}

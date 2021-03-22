@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Comov</string>
+    <string name="welcomeText">Bienvenido, para generar un mapa de señal de intensidad escoge una de las siguientes tecnologías:</string>
+    <string name="exportItem">Exportar datos</string>
+</resources>

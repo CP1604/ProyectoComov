@@ -4,11 +4,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import android.app.UiModeManager;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+
+import java.security.Signature;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -37,7 +40,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onClick2G(View v){
-        //TO-DO
+        Intent intent = new Intent(this, MapsActivity.class);
+        startActivity(intent);
     }
 
     public void onClick3G(View v){

@@ -27,6 +27,10 @@ public class LocationClient {
         return request;
     }
 
+    public static String locationToString(final Location location) {
+        return Location.convert(location.getLatitude(), Location.FORMAT_DEGREES) + " " + Location.convert(location.getLongitude(), Location.FORMAT_DEGREES);
+    }
+
     /*private void getLastLocation(FusedLocationProviderClient fusedLocationProviderClient, final Activity activity) {
         fusedLocationProviderClient = LocationClient.getLocationFusedInstance(this);
 

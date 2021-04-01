@@ -12,6 +12,12 @@ import android.location.Location;
 import android.os.Bundle;
 import android.os.Debug;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.widget.CompoundButton;
+import android.widget.Switch;
+import android.widget.TextView;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -38,6 +44,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private FusedLocationProviderClient fusedLocationClient;
     private GoogleMap mMap;
     private LocationCallback locationCallback;
+    private boolean requestingLocationUpdates = false;
+    private boolean fine_permissions_granted = false;
+    private boolean coarse_permissions_granted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,54 +54,99 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         setContentView(R.layout.activity_maps);
 
         fusedLocationClient = LocationClient.getLocationFusedInstance(this);
-        locationCallback = null;
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+                TextView text = findViewById(R.id.textLocation);
+                if (locationResult == null) {
+                    Log.e("DEBUG", "LOCATIONCALLBACK: NULL LOCATION");
+                }
+                for (Location location : locationResult.getLocations()) {
+                    LocationClient.location = location;
+                    Log.e("DEBUG", LocationClient.locationToString(location));
+                    text.setText(LocationClient.locationToString(location));
+                }
+            }
+        };
+        Switch enabler = findViewById(R.id.enableGPS);
+        enabler.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                requestingLocationUpdates = isChecked;
+                if (requestingLocationUpdates) {
+                    checkLocationCoarsePermissions();
+                    if (coarse_permissions_granted) {
+                        startLocationUpdates();
+                    } else {
+                        enabler.setChecked(false);
+                        checkLocationCoarsePermissions();
+                    }
+                }
+                else {
+                    stopLocationUpdates();
+                }
+            }
+        });
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+        Log.e("DEBUG", "Activity created correctly.");
     }
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
         //Utilizamos la ubicación actual del dispositivo.
+        Log.e("DEBUG", "Launching startShowingCurrentLocation().");
+        Log.e("DEBUG", "Starting to show current location.");
+        checkLocationFinePermissions();
         startShowingCurrentLocation();
     }
 
-    private void checkAppPermissions() {
+    private void checkLocationFinePermissions() {
+        Log.e("DEBUG", "Checking permissions");
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
             } else {
                 ActivityCompat.requestPermissions(this, new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION
+                        Manifest.permission.ACCESS_FINE_LOCATION
                 }, MY_LOCATION_PERMISSION_FINE);
             }
             return;
         }
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        fine_permissions_granted = true;
+        Log.e("DEBUG", "Permissions check has finished.");
+    }
+
+    private void checkLocationCoarsePermissions() {
+        Log.e("DEBUG", "Checking permissions");
+        if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
             } else {
                 ActivityCompat.requestPermissions(this, new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION
+                        Manifest.permission.ACCESS_COARSE_LOCATION
                 }, MY_LOCATION_PERMISSION_COARSE);
             }
             return;
         }
+        coarse_permissions_granted = true;
+        Log.e("DEBUG", "Permissions check has finished.");
     }
 
     @SuppressLint("MissingPermission")
     public void startShowingCurrentLocation() {
-        checkAppPermissions();
-        mMap.setMyLocationEnabled(true);
+        if (fine_permissions_granted) {
+            mMap.setMyLocationEnabled(true);
+        }
+        else mMap.setMyLocationEnabled(false);
     }
 
     @SuppressLint("MissingPermission")
     private void getLastLocation(FusedLocationProviderClient fusedLocationProviderClient, final Activity activity) {
         fusedLocationProviderClient = LocationClient.getLocationFusedInstance(this);
-
-        checkAppPermissions();
-
+        checkLocationCoarsePermissions();
         fusedLocationProviderClient.getLastLocation().addOnSuccessListener(activity, new OnSuccessListener<Location>() {
             @Override
             public void onSuccess(Location location) {
@@ -109,27 +163,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-    public void onRequestPermissionResult(int requestCode, String permissions[], int[] grantResults){
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults){
         switch (requestCode) {
             case MY_LOCATION_PERMISSION_FINE: {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                }
-                else {
-                    //??
+                    fine_permissions_granted = true;
+                    onMapReady(mMap);
+                } else {
+                    Log.e("DEBUG", "There was a problem about FINE permissions.");
                 }
             }
             case MY_LOCATION_PERMISSION_COARSE: {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    getLastLocation(fusedLocationClient, this);
-                }
-                else {
-                    //??
+                    coarse_permissions_granted = true;
+                } else {
+                    Log.e("DEBUG", "There was a problem about COARSE permissions.");
                 }
             }
         }
     }
 
-    public void startLocationUpdates() {
+    /*public void startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
             } else {
@@ -139,8 +194,24 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
             return;
         }
-
         fusedLocationClient.requestLocationUpdates(LocationClient.createLocationRequest(), locationCallback, null);
+    }*/
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopLocationUpdates();
+    }
+
+    @SuppressLint("MissingPermission")
+    private void startLocationUpdates() {
+        fusedLocationClient.requestLocationUpdates(LocationClient.createLocationRequest(), locationCallback, null);
+    }
+
+    private void stopLocationUpdates() {
+        fusedLocationClient.removeLocationUpdates(locationCallback);
+        TextView text = findViewById(R.id.textLocation);
+        text.setText("GPS Disabled");
     }
 
 

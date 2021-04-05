@@ -16,7 +16,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Comov">
-        <activity android:name=".initActivity"></activity>
+        <activity
+            android:name=".LocationActivity"
+            android:configChanges="keyboardHidden|screenSize|orientation"
+            android:theme="@style/Theme.Comov">
+        </activity>
         <!--
              The API key for Google Maps-based APIs is defined as a string resource.
              (See the file "res/values/google_maps_api.xml").
@@ -25,14 +29,19 @@
              sign the APK for publishing.
              You can define the keys for the debug and release targets in src/debug/ and src/release/.
         -->
+        <!-- Google MAP API key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="@string/google_maps_key" />
+            android:value="AIzaSyAnBAgnU6T1Icglg7Nywjyj7A3bqmJ_hVk" />
 
         <activity
             android:name=".MapsActivity"
-            android:label="@string/title_activity_maps" />
-        <activity android:name=".MainActivity">
+            android:label="@string/title_activity_maps"
+            android:theme="@style/Theme.Comov"
+            android:configChanges="keyboardHidden|orientation|screenSize">
+        </activity>
+        <activity
+            android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

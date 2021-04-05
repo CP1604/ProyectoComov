@@ -24,6 +24,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:backgroundTint="#C62828"
+        android:onClick="onClick4G"
         android:text="4G/LTE"
         android:textAppearance="@style/TextAppearance.AppCompat.Large"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -36,6 +37,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:backgroundTint="#C62828"
+        android:onClick="onClick3G"
         android:text="3G/WCDM"
         android:textAppearance="@style/TextAppearance.AppCompat.Large"
         app:layout_constraintBottom_toTopOf="@+id/lteButton"
@@ -64,6 +66,8 @@
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.375" />
+        app:layout_constraintVertical_bias="0.375"
+        android:layout_marginRight="20dp"
+        android:layout_marginLeft="20dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

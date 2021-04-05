@@ -18,6 +18,7 @@
         android:theme="@style/Theme.Comov">
         <activity
             android:name=".LocationActivity"
+            android:configChanges="keyboardHidden|screenSize|orientation"
             android:theme="@style/Theme.Comov">
         </activity>
         <!--
@@ -36,7 +37,8 @@
         <activity
             android:name=".MapsActivity"
             android:label="@string/title_activity_maps"
-            android:theme="@style/Theme.Comov">
+            android:theme="@style/Theme.Comov"
+            android:configChanges="keyboardHidden|orientation|screenSize">
         </activity>
         <activity
             android:name=".MainActivity">

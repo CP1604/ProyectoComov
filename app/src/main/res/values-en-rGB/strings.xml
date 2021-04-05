@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Comov</string>
     <string name="welcomeText">Welcome, to generate an intensity signal map choose one of the following technologies:</string>
-    <string name="exportItem">Export data</string>
+    <string name="loadMap">Load Map</string>
     <string name="title_activity_maps">Map</string>
     <string name="towersButton">Save Towers</string>
     <string name="gpsText">GPS disabled</string>

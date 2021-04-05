@@ -1,13 +1,20 @@
 package inf.um.comov;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Debug;
@@ -18,6 +25,7 @@ import android.view.MenuItem;
 import android.widget.CompoundButton;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -27,6 +35,8 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
@@ -37,7 +47,7 @@ import java.util.List;
 import static inf.um.comov.LocationClient.location;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
-
+    private BroadcastReceiver mReceiver;
     private static final int MY_LOCATION_PERMISSION_FINE = 1;
     private static final int MY_LOCATION_PERMISSION_COARSE = 2;
     private List<Location> locations;
@@ -48,11 +58,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private boolean fine_permissions_granted = false;
     private boolean coarse_permissions_granted = false;
 
+    //Valores permitidos: "2G", "3G", "4G"
+    private String tecnology = null;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
+        //Obtenemos la tecnología con la que vamos a trabajar
+        Bundle extras = getIntent().getExtras();
+        if (extras != null) {
+            tecnology = extras.getString("tecnology");
+        }
         fusedLocationClient = LocationClient.getLocationFusedInstance(this);
         locationCallback = new LocationCallback() {
             @Override
@@ -65,6 +83,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     LocationClient.location = location;
                     Log.e("DEBUG", LocationClient.locationToString(location));
                     text.setText(LocationClient.locationToString(location));
+                    drawCircleOnMap(location, Color.RED);
                 }
             }
         };
@@ -73,9 +92,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 requestingLocationUpdates = isChecked;
+
                 if (requestingLocationUpdates) {
                     checkLocationCoarsePermissions();
                     if (coarse_permissions_granted) {
+                        Log.e("Debug", "Empezando a actualizar ubicación");
                         startLocationUpdates();
                     } else {
                         enabler.setChecked(false);
@@ -87,6 +108,29 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 }
             }
         });
+
+      /*  IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
+
+        //Manejamos las acciones de encendido y apagado de pantalla
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        filter.addAction(Intent.ACTION_USER_PRESENT);
+        mReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                //Si se apaga no ejecutamos acciones adicionales
+                if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
+                    Log.v("DEBUG", "In Method:  ACTION_SCREEN_OFF");
+                }
+                //Si la pantalla se enciende comprobamos el estadod el switch
+                else if (intent.getAction().equals(Intent.ACTION_SCREEN_ON)) {
+                    Log.v("DEBUG", "In Method:  ACTION_SCREEN_ON");
+                    if (requestingLocationUpdates){
+                        startLocationUpdates();
+                    }
+                }
+            }
+        };
+        registerReceiver(mReceiver, filter);*/
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
@@ -214,7 +258,30 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         text.setText("GPS Disabled");
     }
 
+    private void drawCircleOnMap(Location location, int color){
+        Circle circle = mMap.addCircle(new CircleOptions()
+                .center(new LatLng(location.getLatitude(), location.getLongitude()))
+                .radius(5)
+                .strokeColor(color)
+                .fillColor(color));
+    }
 
+    /*//Anula el registro del Receiver: necesario para evitar el lanzamiento de excepciones
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mReceiver != null) {
+            unregisterReceiver(mReceiver);
+            mReceiver = null;
+        }
+    }*/
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (requestingLocationUpdates)
+            startLocationUpdates();
+    }
 }
 
 

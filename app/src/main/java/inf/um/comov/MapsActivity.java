@@ -18,6 +18,7 @@ import android.graphics.Color;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Debug;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -98,7 +99,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     if (coarse_permissions_granted) {
                         Log.e("Debug", "Empezando a actualizar ubicación");
                         startLocationUpdates();
+                        //Comprobar que la ubicacion está activa
+                        String provider = Settings.Secure.getString(getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
+                        System.out.println("Provider contains=> " + provider);
+                        if (provider.contains("gps") || provider.contains("network")){
+                            //nada
+                        } else Toast.makeText(MapsActivity.this, "Necesitas ACTIVAR la ubicación", Toast.LENGTH_SHORT).show();
+
                     } else {
+                        Toast.makeText(MapsActivity.this, "Necesitas dar permisos de ubicación", Toast.LENGTH_SHORT).show();
                         enabler.setChecked(false);
                         checkLocationCoarsePermissions();
                     }

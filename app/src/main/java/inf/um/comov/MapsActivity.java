@@ -1,67 +1,64 @@
 package inf.um.comov;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
-
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.graphics.Color;
 import android.location.Location;
 import android.os.Bundle;
-import android.os.Debug;
 import android.provider.Settings;
+import android.telephony.CellIdentityGsm;
+import android.telephony.CellIdentityLte;
+import android.telephony.CellIdentityWcdma;
+import android.telephony.CellInfo;
+import android.telephony.CellInfoGsm;
+import android.telephony.CellInfoLte;
+import android.telephony.CellInfoWcdma;
+import android.telephony.TelephonyManager;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.widget.CompoundButton;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
-
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
-import static inf.um.comov.LocationClient.location;
-
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+    private final int MY_APP_PERMISSIONS = 1;
+
     private BroadcastReceiver mReceiver;
-    private static final int MY_LOCATION_PERMISSION_FINE = 1;
-    private static final int MY_LOCATION_PERMISSION_COARSE = 2;
+
     private List<Location> locations;
     private FusedLocationProviderClient fusedLocationClient;
     private GoogleMap mMap;
     private LocationCallback locationCallback;
+    private boolean readPhoneStatusGranted = false;
     private boolean requestingLocationUpdates = false;
     private boolean fine_permissions_granted = false;
     private boolean coarse_permissions_granted = false;
 
     //Valores permitidos: "2G", "3G", "4G"
-    private String tecnology = null;
+    private int TECH = -1;
 
+    @SuppressLint("MissingPermission")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -69,9 +66,53 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         //Obtenemos la tecnología con la que vamos a trabajar
         Bundle extras = getIntent().getExtras();
-        if (extras != null) {
-            tecnology = extras.getString("tecnology");
-        }
+        /*if (extras != null) {
+            String tech = extras.getString("tecnology");
+            //Map to numeric value
+            switch (tech){
+                case "2G":
+                    TECH = 1;
+                    break;
+                case "3G":
+                    TECH = 2;
+                    break;
+                case "4G":
+                    TECH = 3;
+                    break;
+                default:
+                    //Por defecto utilizamos la red que está utilizando actualmente el usuario
+                    TelephonyManager telephonyManager = (TelephonyManager) getApplicationContext()
+                            .getSystemService(Context.TELEPHONY_SERVICE);
+                    checkPermissions();
+                    int networkType = telephonyManager.getNetworkType();
+                    switch (networkType) {
+                        case TelephonyManager.NETWORK_TYPE_GPRS:
+                        case TelephonyManager.NETWORK_TYPE_EDGE:
+                        case TelephonyManager.NETWORK_TYPE_CDMA:
+                        case TelephonyManager.NETWORK_TYPE_1xRTT:
+                        case TelephonyManager.NETWORK_TYPE_IDEN:
+                            TECH = 1; break;
+                        case TelephonyManager.NETWORK_TYPE_UMTS:
+                        case TelephonyManager.NETWORK_TYPE_EVDO_0:
+                        case TelephonyManager.NETWORK_TYPE_EVDO_A:
+                        case TelephonyManager.NETWORK_TYPE_HSDPA:
+                        case TelephonyManager.NETWORK_TYPE_HSUPA:
+                        case TelephonyManager.NETWORK_TYPE_HSPA:
+                        case TelephonyManager.NETWORK_TYPE_EVDO_B:
+                        case TelephonyManager.NETWORK_TYPE_EHRPD:
+                        case TelephonyManager.NETWORK_TYPE_HSPAP:
+                            TECH = 2; break;
+                        case TelephonyManager.NETWORK_TYPE_LTE:
+                            TECH = 3; break;
+                        case TelephonyManager.NETWORK_TYPE_NR:
+                            TECH = 3; break;
+                        default:
+                            TECH = -1; break;
+                    }
+                    break;
+            }
+        }*/
+
         fusedLocationClient = LocationClient.getLocationFusedInstance(this);
         locationCallback = new LocationCallback() {
             @Override
@@ -84,7 +125,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     LocationClient.location = location;
                     Log.e("DEBUG", LocationClient.locationToString(location));
                     text.setText(LocationClient.locationToString(location));
-                    drawCircleOnMap(location, Color.RED);
+                    int v = getCellInfo();
+                    drawCircleOnMap(location, v);
                 }
             }
         };
@@ -95,7 +137,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 requestingLocationUpdates = isChecked;
 
                 if (requestingLocationUpdates) {
-                    checkLocationCoarsePermissions();
+                    checkPermissions();
                     if (coarse_permissions_granted) {
                         Log.e("Debug", "Empezando a actualizar ubicación");
                         startLocationUpdates();
@@ -107,9 +149,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         } else Toast.makeText(MapsActivity.this, "Necesitas ACTIVAR la ubicación", Toast.LENGTH_SHORT).show();
 
                     } else {
+                        Log.e("DEBUG", "Switch.onCheckedChanged: Cannot update location because of permissions were denied");
                         Toast.makeText(MapsActivity.this, "Necesitas dar permisos de ubicación", Toast.LENGTH_SHORT).show();
                         enabler.setChecked(false);
-                        checkLocationCoarsePermissions();
+                        checkPermissions();
                     }
                 }
                 else {
@@ -154,37 +197,43 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         //Utilizamos la ubicación actual del dispositivo.
         Log.e("DEBUG", "Launching startShowingCurrentLocation().");
         Log.e("DEBUG", "Starting to show current location.");
-        checkLocationFinePermissions();
+        checkPermissions();
         startShowingCurrentLocation();
     }
 
-    private void checkLocationFinePermissions() {
+    public void checkPermissions() {
         Log.e("DEBUG", "Checking permissions");
-        if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
-            } else {
-                ActivityCompat.requestPermissions(this, new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                }, MY_LOCATION_PERMISSION_FINE);
+        List<String> permissions = new ArrayList<String>();
+        if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_PHONE_STATE)) {
             }
-            return;
+            else permissions.add(Manifest.permission.READ_PHONE_STATE);
         }
-        fine_permissions_granted = true;
-        Log.e("DEBUG", "Permissions check has finished.");
-    }
 
-    private void checkLocationCoarsePermissions() {
-        Log.e("DEBUG", "Checking permissions");
+
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
-            } else {
-                ActivityCompat.requestPermissions(this, new String[]{
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                }, MY_LOCATION_PERMISSION_COARSE);
             }
+            else permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
+
+
+        if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+            }
+            else permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+
+        if (permissions.size() != 0) {
+            String[] stringArray = permissions.toArray(new String[0]);
+            ActivityCompat.requestPermissions(this, stringArray
+            , MY_APP_PERMISSIONS);
             return;
         }
+        readPhoneStatusGranted = true;
         coarse_permissions_granted = true;
+        fine_permissions_granted = true;
+
         Log.e("DEBUG", "Permissions check has finished.");
     }
 
@@ -199,40 +248,50 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @SuppressLint("MissingPermission")
     private void getLastLocation(FusedLocationProviderClient fusedLocationProviderClient, final Activity activity) {
         fusedLocationProviderClient = LocationClient.getLocationFusedInstance(this);
-        checkLocationCoarsePermissions();
-        fusedLocationProviderClient.getLastLocation().addOnSuccessListener(activity, new OnSuccessListener<Location>() {
-            @Override
-            public void onSuccess(Location location) {
-                if (location != null) {
-                    LocationClient.location = location;
-                    locations.add(location);
+        if (coarse_permissions_granted) {
+            fusedLocationProviderClient.getLastLocation().addOnSuccessListener(activity, new OnSuccessListener<Location>() {
+                @Override
+                public void onSuccess(Location location) {
+                    if (location != null) {
+                        LocationClient.location = location;
+                        locations.add(location);
+                    }
                 }
-            }
-        }).addOnFailureListener(activity, new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-                Log.e("DEBUG", "Something went wrong");
-            }
-        });
+            }).addOnFailureListener(activity, new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    Log.e("DEBUG", "Something went wrong");
+                }
+            });
+        }
+        else Log.e("DEBUG", "getLastLocation: Cannot get last device location because of permissions were denied");
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults){
         switch (requestCode) {
-            case MY_LOCATION_PERMISSION_FINE: {
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    fine_permissions_granted = true;
-                    onMapReady(mMap);
+            case MY_APP_PERMISSIONS: {
+                if (grantResults.length > 0) {
+                    boolean granted = true;
+                    for (int i = 0; i < grantResults.length; i++) {
+                        if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                            granted = false;
+                            break;
+                        }
+                    }
+                    if (granted) {
+                        Log.e("DEBUG", "Permissions Granted.");
+                        readPhoneStatusGranted = true;
+                        coarse_permissions_granted = true;
+                        fine_permissions_granted = true;
+                        onMapReady(mMap);
+                    }
+                    else
+                        Log.e("DEBUG", "There was a problem about permissions.");
                 } else {
-                    Log.e("DEBUG", "There was a problem about FINE permissions.");
+                    Log.e("DEBUG", "There was a problem about permissions.");
                 }
-            }
-            case MY_LOCATION_PERMISSION_COARSE: {
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    coarse_permissions_granted = true;
-                } else {
-                    Log.e("DEBUG", "There was a problem about COARSE permissions.");
-                }
+                break;
             }
         }
     }
@@ -267,12 +326,120 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         text.setText("GPS Disabled");
     }
 
-    private void drawCircleOnMap(Location location, int color){
+    /*
+     * Mapear valores del parámetro color a Colores
+     * case 1:
+     *      Color = Rojo: Intensidad de señal baja
+     * case 2:
+     *      Color = Amarillo: Intensidad de señal baja
+     * case 3:
+     *      Color = Azul: Intensidad de señal baja
+     * case 4:
+     *      Color = Verde claro: Intensidad de señal baja
+     * defautl: //Cualquier otro valor
+     *      Color = Blanco: Desconocido
+     */
+    private void drawCircleOnMap(Location location, int color) {
+        int c = -1;
+        switch (color){
+            case -2: //No tenemos permisos...
+                c = Color.BLACK;
+                break;
+            case 1:
+                c = Color.RED;
+                break;
+            case 2:
+                c = Color.YELLOW;
+                break;
+            case 3:
+                c = Color.BLUE;
+                break;
+            case 4:
+                c = Color.GREEN;
+                break;
+            default:
+                c = Color.WHITE;
+        }
         Circle circle = mMap.addCircle(new CircleOptions()
                 .center(new LatLng(location.getLatitude(), location.getLongitude()))
                 .radius(5)
-                .strokeColor(color)
-                .fillColor(color));
+                .strokeColor(c)
+                .fillColor(c));
+    }
+
+    /*
+     * A tener en cuenta:
+     * - SIGNAL_STRENGTH_GREAT = 4
+     * - SIGNAL_STRENGTH_GOOD = 3
+     * - SIGNAL_STRENGTH_MODERATE = 2
+     * - SIGNAL_STRENGTH_POOR = 1
+     * - SIGNAL_STRENGTH_NONE_OR_UNKNOWN = 0
+     */
+    @SuppressLint("MissingPermission")
+    public int getCellInfo() {
+        //Check permissions
+        if (readPhoneStatusGranted && coarse_permissions_granted) {
+            //Obtenemos información
+
+            TelephonyManager telephonyManager = (TelephonyManager) getApplicationContext()
+                    .getSystemService(Context.TELEPHONY_SERVICE);
+            /*if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M){
+                //List<NeighboringCellInfo> neighCells = telephonyManager.getNeighboringCellInfo();
+            }
+            else {*/
+            List<CellInfo> cellInfoList = telephonyManager.getAllCellInfo();
+            //LOG
+            StringBuilder text = new StringBuilder();
+            text.append("Found").append(cellInfoList.size()).append(" cells\n");
+
+            List<Integer> signalStrenght = new ArrayList<Integer>();
+            for (CellInfo info : cellInfoList) {
+                if (info instanceof CellInfoWcdma) {
+                    CellInfoWcdma infoWcdma = (CellInfoWcdma) info;
+                    CellIdentityWcdma id = infoWcdma.getCellIdentity();
+
+                    text.append("WCDMA ID: {cid: ").append(id.getCid());
+                    text.append(" mcc: ").append(id.getMcc());
+                    text.append(" mnc: ").append(id.getMnc());
+                    text.append(" lac: ").append(id.getLac());
+                    text.append("} Level:  ").append(infoWcdma.getCellSignalStrength().getLevel())
+                            .append("\n");
+                    signalStrenght.add(infoWcdma.getCellSignalStrength().getLevel());
+                }
+                else if (info instanceof CellInfoLte) {
+                    CellInfoLte infoLte = (CellInfoLte) info;
+                    CellIdentityLte id = infoLte.getCellIdentity();
+
+                    text.append("LTE ID: {ci: ").append(id.getCi());
+                    text.append(" mcc: ").append(id.getMcc());
+                    text.append(" mnc: ").append(id.getMnc());
+                    text.append(" tac: ").append(id.getTac());
+                    text.append("} Level:  ").append(infoLte.getCellSignalStrength().getLevel())
+                            .append("\n");
+                    signalStrenght.add(infoLte.getCellSignalStrength().getLevel());
+                }
+
+                else if (info instanceof CellInfoGsm) {
+                    CellInfoGsm infoGsm = (CellInfoGsm) info;
+                    CellIdentityGsm id = infoGsm.getCellIdentity();
+
+                    text.append("GSM ID: {cid: ").append(id.getCid());
+                    text.append(" mcc: ").append(id.getMcc());
+                    text.append(" mnc: ").append(id.getMnc());
+                    text.append(" lac: ").append(id.getLac());
+                    text.append("} Level:  ").append(infoGsm.getCellSignalStrength().getLevel())
+                            .append("\n");
+                    signalStrenght.add(infoGsm.getCellSignalStrength().getLevel());
+                }
+            }
+            if (signalStrenght.size() == 0)
+                return 0;
+            int max = signalStrenght.stream().max(Comparator.comparing(Integer::valueOf)).get();
+            return max;
+        }
+        else
+            //No tenemos permisos y por tanto la funcionalidad no es accesible
+            return -2;
     }
 
     /*//Anula el registro del Receiver: necesario para evitar el lanzamiento de excepciones

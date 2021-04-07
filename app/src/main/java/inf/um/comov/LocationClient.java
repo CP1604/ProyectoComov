@@ -24,6 +24,7 @@ public class LocationClient {
         request.setInterval(10000);
         request.setFastestInterval(5000);
         request.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        request.setSmallestDisplacement(20);
         return request;
     }
 

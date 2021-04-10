@@ -12,6 +12,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.telephony.CellIdentityGsm;
 import android.telephony.CellIdentityLte;
@@ -22,6 +23,8 @@ import android.telephony.CellInfoLte;
 import android.telephony.CellInfoWcdma;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -37,16 +40,24 @@ import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
     private final int MY_APP_PERMISSIONS = 1;
 
     private BroadcastReceiver mReceiver;
 
-    private List<Location> locations;
+    private Map<Location, Integer> locations;
     private FusedLocationProviderClient fusedLocationClient;
     private GoogleMap mMap;
     private LocationCallback locationCallback;
@@ -54,9 +65,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private boolean requestingLocationUpdates = false;
     private boolean fine_permissions_granted = false;
     private boolean coarse_permissions_granted = false;
+    private boolean writeExternal_granted = false;
 
     //Valores permitidos: "2G", "3G", "4G"
     private int TECH = -1;
+    private String technology;
 
     @SuppressLint("MissingPermission")
     @Override
@@ -64,12 +77,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
+        //Almacena los puntos del mapa
+        locations = new HashMap<Location, Integer>();
+
         //Obtenemos la tecnología con la que vamos a trabajar
         Bundle extras = getIntent().getExtras();
-        /*if (extras != null) {
-            String tech = extras.getString("tecnology");
+        technology = extras.getString("tecnology");
+        if (extras != null) {
             //Map to numeric value
-            switch (tech){
+            switch (technology){
                 case "2G":
                     TECH = 1;
                     break;
@@ -103,7 +119,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         case TelephonyManager.NETWORK_TYPE_HSPAP:
                             TECH = 2; break;
                         case TelephonyManager.NETWORK_TYPE_LTE:
-                            TECH = 3; break;
                         case TelephonyManager.NETWORK_TYPE_NR:
                             TECH = 3; break;
                         default:
@@ -111,8 +126,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     }
                     break;
             }
-        }*/
-
+        }
         fusedLocationClient = LocationClient.getLocationFusedInstance(this);
         locationCallback = new LocationCallback() {
             @Override
@@ -127,17 +141,24 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     text.setText(LocationClient.locationToString(location));
                     int v = getCellInfo();
                     drawCircleOnMap(location, v);
+
+                    //Guardamos la ubicación junto con el valor del punto
+                    if (v != 0 && v != -2) //No hay señal y no hay permisos
+                        locations.put(location, v);
                 }
             }
         };
+        //Listener para el switch que controla el GPS
         Switch enabler = findViewById(R.id.enableGPS);
         enabler.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 requestingLocationUpdates = isChecked;
 
+                //Si el switch está activado entonces debemos empezar a recibir actualizaciones de localización
                 if (requestingLocationUpdates) {
                     checkPermissions();
+                    //Funcionalidad disponible solo si se han dado los permisos correspondientes
                     if (coarse_permissions_granted) {
                         Log.e("Debug", "Empezando a actualizar ubicación");
                         startLocationUpdates();
@@ -156,11 +177,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     }
                 }
                 else {
+                    //Se ha desactivado el GPS: detenemos las actualizaciones de ubicación
                     stopLocationUpdates();
                 }
             }
         });
 
+        //Listener para el botón
+        Button save = findViewById(R.id.saveTowers);
+        save.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveTowers();
+            }
+        });
       /*  IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
 
         //Manejamos las acciones de encendido y apagado de pantalla
@@ -224,6 +254,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             else permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
 
+        if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            }
+            else permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
+
+
         if (permissions.size() != 0) {
             String[] stringArray = permissions.toArray(new String[0]);
             ActivityCompat.requestPermissions(this, stringArray
@@ -232,6 +269,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
         readPhoneStatusGranted = true;
         coarse_permissions_granted = true;
+        writeExternal_granted = true;
         fine_permissions_granted = true;
 
         Log.e("DEBUG", "Permissions check has finished.");
@@ -254,7 +292,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 public void onSuccess(Location location) {
                     if (location != null) {
                         LocationClient.location = location;
-                        locations.add(location);
                     }
                 }
             }).addOnFailureListener(activity, new OnFailureListener() {
@@ -284,6 +321,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         readPhoneStatusGranted = true;
                         coarse_permissions_granted = true;
                         fine_permissions_granted = true;
+                        writeExternal_granted = true;
                         onMapReady(mMap);
                     }
                     else
@@ -295,19 +333,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         }
     }
-
-    /*public void startLocationUpdates() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
-            } else {
-                ActivityCompat.requestPermissions(this, new String[]{
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                }, MY_LOCATION_PERMISSION_FINE);
-            }
-            return;
-        }
-        fusedLocationClient.requestLocationUpdates(LocationClient.createLocationRequest(), locationCallback, null);
-    }*/
 
     @Override
     protected void onPause() {
@@ -394,7 +419,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
             List<Integer> signalStrenght = new ArrayList<Integer>();
             for (CellInfo info : cellInfoList) {
-                if (info instanceof CellInfoWcdma) {
+                //Get 2G info
+                if (info instanceof CellInfoWcdma && TECH == 1) {
                     CellInfoWcdma infoWcdma = (CellInfoWcdma) info;
                     CellIdentityWcdma id = infoWcdma.getCellIdentity();
 
@@ -406,7 +432,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             .append("\n");
                     signalStrenght.add(infoWcdma.getCellSignalStrength().getLevel());
                 }
-                else if (info instanceof CellInfoLte) {
+                //Get 3G info
+                else if (info instanceof CellInfoLte && TECH == 2) {
                     CellInfoLte infoLte = (CellInfoLte) info;
                     CellIdentityLte id = infoLte.getCellIdentity();
 
@@ -418,8 +445,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             .append("\n");
                     signalStrenght.add(infoLte.getCellSignalStrength().getLevel());
                 }
-
-                else if (info instanceof CellInfoGsm) {
+                //Get 4G info
+                else if (info instanceof CellInfoGsm && TECH == 3) {
                     CellInfoGsm infoGsm = (CellInfoGsm) info;
                     CellIdentityGsm id = infoGsm.getCellIdentity();
 
@@ -432,13 +459,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     signalStrenght.add(infoGsm.getCellSignalStrength().getLevel());
                 }
             }
-            if (signalStrenght.size() == 0)
+            //Si no hay elementos en la lista puede ser que no esté activa la tecnologia o que no haya ninguna antena cerca
+            if (signalStrenght.size() == 0) {
+                Toast.makeText(MapsActivity.this, "Fuerza el uso de la red "  + technology + " en ajutes.",  Toast.LENGTH_SHORT).show();
                 return 0;
+            }
             int max = signalStrenght.stream().max(Comparator.comparing(Integer::valueOf)).get();
             return max;
         }
         else
             //No tenemos permisos y por tanto la funcionalidad no es accesible
+            Toast.makeText(MapsActivity.this, "Necesitas dar los permisos necesarios.",  Toast.LENGTH_SHORT).show();
             return -2;
     }
 
@@ -458,207 +489,41 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (requestingLocationUpdates)
             startLocationUpdates();
     }
-}
 
-
-/*
-import android.Manifest;
-import android.content.DialogInterface;
-import android.content.pm.PackageManager;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Looper;
-import android.util.Log;
-import android.widget.Toast;
-import android.location.Location;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdateFactory;
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
-import com.google.android.gms.maps.model.MarkerOptions;
-
-import java.util.List;
-
-/**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     *//*
-
-/*
-public class MapsActivity extends AppCompatActivity
-        implements OnMapReadyCallback {
-
-    GoogleMap mGoogleMap;
-    SupportMapFragment mapFrag;
-    LocationRequest mLocationRequest;
-    Location mLastLocation;
-    Marker mCurrLocationMarker;
-    FusedLocationProviderClient mFusedLocationClient;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_maps);
-
-        getSupportActionBar().setTitle("Map Location Activity");
-
-        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-
-        mapFrag = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
-        mapFrag.getMapAsync(this);
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-
-        //stop location updates when Activity is no longer active
-        if (mFusedLocationClient != null) {
-            mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-        }
-    }
-
-    @Override
-    public void onMapReady(GoogleMap googleMap) {
-        mGoogleMap = googleMap;
-        mGoogleMap.setMapType(GoogleMap.MAP_TYPE_HYBRID);
-
-        mLocationRequest = new LocationRequest();
-        mLocationRequest.setInterval(120000); // two minute interval
-        mLocationRequest.setFastestInterval(120000);
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
-
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)
-                    == PackageManager.PERMISSION_GRANTED) {
-                //Location Permission already granted
-                mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.myLooper());
-                mGoogleMap.setMyLocationEnabled(true);
-            } else {
-                //Request Location Permission
-                checkLocationPermission();
+    private void saveTowers() {
+        //Si no hay puntos o solo hay 1 no se guarda
+        //Solo guardamos si tenemos permisos para hacerlo
+        if (locations.size() >= 2 && writeExternal_granted) {
+            //Alamcenamos en el directorio /save_maps del almacenamiento externo de la app
+            String root = Environment.getExternalStorageDirectory().toString();
+            File dir = new File(root + "/saved_maps");
+            //Si el directorio aún no existe se crea
+            if(!dir.exists()){
+                dir.mkdir();
             }
+            //Nombre: Fecha en la que se crea el fichero con extensión .txt
+            String name = new Date().toString() + ".txt".trim();
+            try {
+                File storedFile = new File(dir, name);
+                FileWriter writer = new FileWriter(storedFile);
+                writer.append("Technology Used:" + technology + "\n");
+                //Cada linea tiene la localización y el punto (latitude:longitude;color)
+                for (Map.Entry<Location, Integer> entry : locations.entrySet()){
+                    writer.append(entry.getKey().getLatitude() + ":" + entry.getKey().getLongitude() + ";" +entry.getValue() + "\n");
+                }
+                writer.flush();
+                writer.close();
+            } catch (Exception e) {
+                Toast.makeText(MapsActivity.this, "Se ha producido un error al escribir el fichero."
+                        ,  Toast.LENGTH_SHORT).show();
+                e.printStackTrace();
+            }
+            return;
         }
         else {
-            mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.myLooper());
-            mGoogleMap.setMyLocationEnabled(true);
-        }
-    }
-
-    LocationCallback mLocationCallback = new LocationCallback() {
-        @Override
-        public void onLocationResult(LocationResult locationResult) {
-            List<Location> locationList = locationResult.getLocations();
-            if (locationList.size() > 0) {
-                //The last location in the list is the newest
-                Location location = locationList.get(locationList.size() - 1);
-                Log.i("MapsActivity", "Location: " + location.getLatitude() + " " + location.getLongitude());
-                mLastLocation = location;
-                if (mCurrLocationMarker != null) {
-                    mCurrLocationMarker.remove();
-                }
-
-                //Place current location marker
-                LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-                MarkerOptions markerOptions = new MarkerOptions();
-                markerOptions.position(latLng);
-                markerOptions.title("Current Position");
-                markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_MAGENTA));
-                mCurrLocationMarker = mGoogleMap.addMarker(markerOptions);
-
-                //move map camera
-                mGoogleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 11));
-            }
-        }
-    };
-
-    public static final int MY_PERMISSIONS_REQUEST_LOCATION = 99;
-    private void checkLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)) {
-
-                // Show an explanation to the user *asynchronously* -- don't block
-                // this thread waiting for the user's response! After the user
-                // sees the explanation, try again to request the permission.
-                new AlertDialog.Builder(this)
-                        .setTitle("Location Permission Needed")
-                        .setMessage("This app needs the Location permission, please accept to use location functionality")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                //Prompt the user once explanation has been shown
-                                ActivityCompat.requestPermissions(MapsActivity.this,
-                                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                        MY_PERMISSIONS_REQUEST_LOCATION );
-                            }
-                        })
-                        .create()
-                        .show();
-
-
-            } else {
-                // No explanation needed, we can request the permission.
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        MY_PERMISSIONS_REQUEST_LOCATION );
-            }
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           String permissions[], int[] grantResults) {
-        switch (requestCode) {
-            case MY_PERMISSIONS_REQUEST_LOCATION: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-
-                    // permission was granted, yay! Do the
-                    // location-related task you need to do.
-                    if (ContextCompat.checkSelfPermission(this,
-                            Manifest.permission.ACCESS_FINE_LOCATION)
-                            == PackageManager.PERMISSION_GRANTED) {
-
-                        mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.myLooper());
-                        mGoogleMap.setMyLocationEnabled(true);
-                    }
-
-                } else {
-
-                    // permission denied, boo! Disable the
-                    // functionality that depends on this permission.
-                    Toast.makeText(this, "permission denied", Toast.LENGTH_LONG).show();
-                }
-                return;
-            }
-
-            // other 'case' lines to check for other
-            // permissions this app might request
+            Toast.makeText(MapsActivity.this, "Se necesitan al menos 2 ubicaciones registradas."
+                    ,  Toast.LENGTH_SHORT).show();
+            return;
         }
     }
 }
-*/

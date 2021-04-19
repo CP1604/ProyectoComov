@@ -6,4 +6,5 @@
     <string name="title_activity_maps">Map</string>
     <string name="towersButton">Guardar Torres</string>
     <string name="gpsText">GPS desactivado</string>
+    <string name="Find_towers">Buscar torres</string>
 </resources>

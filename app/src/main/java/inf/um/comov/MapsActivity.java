@@ -14,6 +14,7 @@ import android.location.Location;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
+import android.telecom.Call;
 import android.telephony.CellIdentityGsm;
 import android.telephony.CellIdentityLte;
 import android.telephony.CellIdentityWcdma;
@@ -52,6 +53,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
+
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
     private final int MY_APP_PERMISSIONS = 1;
 
@@ -66,6 +72,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private boolean fine_permissions_granted = false;
     private boolean coarse_permissions_granted = false;
     private boolean writeExternal_granted = false;
+    private TextView tower;
 
     //Valores permitidos: "2G", "3G", "4G"
     private int TECH = -1;
@@ -85,7 +92,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         technology = extras.getString("tecnology");
         if (extras != null) {
             //Map to numeric value
-            switch (technology){
+            switch (technology) {
                 case "2G":
                     TECH = 1;
                     break;
@@ -107,7 +114,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         case TelephonyManager.NETWORK_TYPE_CDMA:
                         case TelephonyManager.NETWORK_TYPE_1xRTT:
                         case TelephonyManager.NETWORK_TYPE_IDEN:
-                            TECH = 1; break;
+                            TECH = 1;
+                            break;
                         case TelephonyManager.NETWORK_TYPE_UMTS:
                         case TelephonyManager.NETWORK_TYPE_EVDO_0:
                         case TelephonyManager.NETWORK_TYPE_EVDO_A:
@@ -117,12 +125,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         case TelephonyManager.NETWORK_TYPE_EVDO_B:
                         case TelephonyManager.NETWORK_TYPE_EHRPD:
                         case TelephonyManager.NETWORK_TYPE_HSPAP:
-                            TECH = 2; break;
+                            TECH = 2;
+                            break;
                         case TelephonyManager.NETWORK_TYPE_LTE:
                         case TelephonyManager.NETWORK_TYPE_NR:
-                            TECH = 3; break;
+                            TECH = 3;
+                            break;
                         default:
-                            TECH = -1; break;
+                            TECH = -1;
+                            break;
                     }
                     break;
             }
@@ -165,9 +176,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         //Comprobar que la ubicacion está activa
                         String provider = Settings.Secure.getString(getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
                         System.out.println("Provider contains=> " + provider);
-                        if (provider.contains("gps") || provider.contains("network")){
+                        if (provider.contains("gps") || provider.contains("network")) {
                             //nada
-                        } else Toast.makeText(MapsActivity.this, "Necesitas ACTIVAR la ubicación", Toast.LENGTH_SHORT).show();
+                        } else
+                            Toast.makeText(MapsActivity.this, "Necesitas ACTIVAR la ubicación", Toast.LENGTH_SHORT).show();
 
                     } else {
                         Log.e("DEBUG", "Switch.onCheckedChanged: Cannot update location because of permissions were denied");
@@ -175,8 +187,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         enabler.setChecked(false);
                         checkPermissions();
                     }
-                }
-                else {
+                } else {
                     //Se ha desactivado el GPS: detenemos las actualizaciones de ubicación
                     stopLocationUpdates();
                 }
@@ -191,6 +202,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 saveTowers();
             }
         });
+
+        //Listener para Mostrar torres
+        Button showtowers = findViewById(R.id.showTowers);
+        showtowers.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTowers();
+            }
+        });
+
+
+
+
+
+
       /*  IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
 
         //Manejamos las acciones de encendido y apagado de pantalla
@@ -236,35 +262,31 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         List<String> permissions = new ArrayList<String>();
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_PHONE_STATE)) {
-            }
-            else permissions.add(Manifest.permission.READ_PHONE_STATE);
+            } else permissions.add(Manifest.permission.READ_PHONE_STATE);
         }
 
 
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
-            }
-            else permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+            } else permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
 
 
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
-            }
-            else permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            } else permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
 
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            }
-            else permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            } else permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
 
 
         if (permissions.size() != 0) {
             String[] stringArray = permissions.toArray(new String[0]);
             ActivityCompat.requestPermissions(this, stringArray
-            , MY_APP_PERMISSIONS);
+                    , MY_APP_PERMISSIONS);
             return;
         }
         readPhoneStatusGranted = true;
@@ -279,8 +301,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void startShowingCurrentLocation() {
         if (fine_permissions_granted) {
             mMap.setMyLocationEnabled(true);
-        }
-        else mMap.setMyLocationEnabled(false);
+        } else mMap.setMyLocationEnabled(false);
     }
 
     @SuppressLint("MissingPermission")
@@ -300,12 +321,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     Log.e("DEBUG", "Something went wrong");
                 }
             });
-        }
-        else Log.e("DEBUG", "getLastLocation: Cannot get last device location because of permissions were denied");
+        } else
+            Log.e("DEBUG", "getLastLocation: Cannot get last device location because of permissions were denied");
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults){
+    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
         switch (requestCode) {
             case MY_APP_PERMISSIONS: {
                 if (grantResults.length > 0) {
@@ -323,8 +344,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         fine_permissions_granted = true;
                         writeExternal_granted = true;
                         onMapReady(mMap);
-                    }
-                    else
+                    } else
                         Log.e("DEBUG", "There was a problem about permissions.");
                 } else {
                     Log.e("DEBUG", "There was a problem about permissions.");
@@ -366,7 +386,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      */
     private void drawCircleOnMap(Location location, int color) {
         int c = -1;
-        switch (color){
+        switch (color) {
             case -2: //No tenemos permisos...
                 c = Color.BLACK;
                 break;
@@ -390,6 +410,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .radius(5)
                 .strokeColor(c)
                 .fillColor(c));
+    }
+
+    private void drawTowerOnMap(Location location) {
+        Circle circle = mMap.addCircle(new CircleOptions()
+                .center(new LatLng(location.getLatitude(), location.getLongitude()))
+                .radius(5)
+                .strokeColor(Color.CYAN)
+                .fillColor(Color.CYAN));
     }
 
     /*
@@ -461,16 +489,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
             //Si no hay elementos en la lista puede ser que no esté activa la tecnologia o que no haya ninguna antena cerca
             if (signalStrenght.size() == 0) {
-                Toast.makeText(MapsActivity.this, "Fuerza el uso de la red "  + technology + " en ajutes.",  Toast.LENGTH_SHORT).show();
+                Toast.makeText(MapsActivity.this, "Fuerza el uso de la red " + technology + " en ajutes.", Toast.LENGTH_SHORT).show();
                 return 0;
             }
             int max = signalStrenght.stream().max(Comparator.comparing(Integer::valueOf)).get();
             return max;
-        }
-        else
+        } else
             //No tenemos permisos y por tanto la funcionalidad no es accesible
-            Toast.makeText(MapsActivity.this, "Necesitas dar los permisos necesarios.",  Toast.LENGTH_SHORT).show();
-            return -2;
+            Toast.makeText(MapsActivity.this, "Necesitas dar los permisos necesarios.", Toast.LENGTH_SHORT).show();
+        return -2;
     }
 
     /*//Anula el registro del Receiver: necesario para evitar el lanzamiento de excepciones
@@ -498,7 +525,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             String root = Environment.getExternalStorageDirectory().toString();
             File dir = new File(root + "/saved_maps");
             //Si el directorio aún no existe se crea
-            if(!dir.exists()){
+            if (!dir.exists()) {
                 dir.mkdir();
             }
             //Nombre: Fecha en la que se crea el fichero con extensión .txt
@@ -508,22 +535,99 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 FileWriter writer = new FileWriter(storedFile);
                 writer.append("Technology Used:" + technology + "\n");
                 //Cada linea tiene la localización y el punto (latitude:longitude;color)
-                for (Map.Entry<Location, Integer> entry : locations.entrySet()){
-                    writer.append(entry.getKey().getLatitude() + ":" + entry.getKey().getLongitude() + ";" +entry.getValue() + "\n");
+                for (Map.Entry<Location, Integer> entry : locations.entrySet()) {
+                    writer.append(entry.getKey().getLatitude() + ":" + entry.getKey().getLongitude() + ";" + entry.getValue() + "\n");
                 }
                 writer.flush();
                 writer.close();
             } catch (Exception e) {
                 Toast.makeText(MapsActivity.this, "Se ha producido un error al escribir el fichero."
-                        ,  Toast.LENGTH_SHORT).show();
+                        , Toast.LENGTH_SHORT).show();
                 e.printStackTrace();
             }
             return;
-        }
-        else {
+        } else {
             Toast.makeText(MapsActivity.this, "Se necesitan al menos 2 ubicaciones registradas."
-                    ,  Toast.LENGTH_SHORT).show();
+                    , Toast.LENGTH_SHORT).show();
             return;
         }
     }
+
+    private void showTowers() {
+        TelephonyManager telephonyManager = (TelephonyManager) getApplicationContext()
+                .getSystemService(Context.TELEPHONY_SERVICE);
+        List<CellInfo> cellInfoList = telephonyManager.getAllCellInfo();
+        List<Integer> signalStrenght = new ArrayList<Integer>();
+
+        String peticion = "https://api.mylnikov.org/geolocation/cell?v=1.1&data=open";
+        for (CellInfo info : cellInfoList) {
+            //Get 2G info
+            if (info instanceof CellInfoWcdma && TECH == 1) {
+                CellInfoWcdma infoWcdma = (CellInfoWcdma) info;
+                CellIdentityWcdma id = infoWcdma.getCellIdentity();
+                peticion += "&mcc=" + id.getMcc() + "&mnc=" + id.getMnc() + "&lac=" + id.getLac() + "&cellid=" + id.getCid();
+                getGet(peticion);
+            }
+            //Get 3G info
+            else if (info instanceof CellInfoLte && TECH == 2) {
+                CellInfoLte infoLte = (CellInfoLte) info;
+                CellIdentityLte id = infoLte.getCellIdentity();
+                peticion += "&mcc=" + id.getMcc() + "&mnc=" + id.getMnc() + "&lac=" + id.getTac() + "&cellid=" + id.getCi();
+                getGet(peticion);
+
+            }
+            //Get 4G info
+            else if (info instanceof CellInfoGsm && TECH == 3) {
+                CellInfoGsm infoGsm = (CellInfoGsm) info;
+                CellIdentityGsm id = infoGsm.getCellIdentity();
+
+                peticion += "&mcc=" + id.getMcc() + "&mnc=" + id.getMnc() + "&lac=" + id.getLac() + "&cellid=" + id.getCid(); //id.getMncString()
+
+                getGet(peticion);
+            } else {
+                //No tenemos permisos y por tanto la funcionalidad no es accesible
+                CellIdentityGsm id = null;
+                Toast.makeText(MapsActivity.this, "Necesitas dar los permisos necesarios.", Toast.LENGTH_SHORT).show();
+            }
+
+
+        }
+    }
+
+    private void getGet(String url){
+        Log.e("DEBUG", url);
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl(url)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+
+        mylnikov mylnikov = retrofit.create(inf.um.comov.mylnikov.class);
+
+        retrofit2.Call<List<Get>> call = mylnikov.getGet();
+
+        Log.e("DEBUG", "LLega");
+        call.enqueue(new Callback<List<Get>>() {
+            @Override
+            public void onResponse(retrofit2.Call<List<Get>> call, Response<List<Get>> response) {
+                if(!response.isSuccessful()){
+                    tower.setText("Código: " + response.code());
+                    return;
+                }
+                List<Get> getList = response.body();
+
+                for(Get get: getList){
+                    Location locationTower = new Location("");
+                    locationTower.setLatitude(get.getLat());
+                    locationTower.setLongitude(get.getLon());
+                    drawTowerOnMap(locationTower);
+                }
+            }
+
+            @Override
+            public void onFailure(retrofit2.Call<List<Get>> call, Throwable t) {
+                tower.setText(t.getMessage());
+            }
+        });
+    }
+
 }

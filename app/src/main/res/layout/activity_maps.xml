@@ -19,12 +19,22 @@
 
     <Button
         android:id="@+id/saveTowers"
-        android:layout_width="131dp"
-        android:layout_height="wrap_content"
+        android:layout_width="127dp"
+        android:layout_height="58dp"
         android:layout_gravity="bottom|center"
+        android:layout_marginLeft="20dp"
         android:layout_marginBottom="20dp"
         android:onClick="onClickSaveTowers"
         android:text="@string/towersButton" />
+
+    <Button
+        android:id="@+id/showTowers"
+        android:layout_width="123dp"
+        android:layout_height="58dp"
+        android:layout_gravity="bottom"
+        android:layout_marginLeft="15dp"
+        android:layout_marginBottom="20dp"
+        android:text="@string/Find_towers" />
 
     <Switch
         android:id="@+id/enableGPS"
@@ -49,4 +59,5 @@
         android:background="#C62828"
         android:breakStrategy="high_quality"
         android:text="@string/gpsText" />
+
 </FrameLayout>

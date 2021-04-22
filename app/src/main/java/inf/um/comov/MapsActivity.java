@@ -9,12 +9,17 @@ import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
-import android.telecom.Call;
 import android.telephony.CellIdentityGsm;
 import android.telephony.CellIdentityLte;
 import android.telephony.CellIdentityWcdma;
@@ -24,9 +29,11 @@ import android.telephony.CellInfoLte;
 import android.telephony.CellInfoWcdma;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -36,15 +43,27 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PointOfInterest;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -53,17 +72,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback{
     private final int MY_APP_PERMISSIONS = 1;
+    private static final String mylnikovURL = "https://api.mylnikov.org/";
 
     private BroadcastReceiver mReceiver;
-
     private Map<Location, Integer> locations;
+    private Map<Location, String> towers;
     private FusedLocationProviderClient fusedLocationClient;
     private GoogleMap mMap;
     private LocationCallback locationCallback;
@@ -86,6 +107,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         //Almacena los puntos del mapa
         locations = new HashMap<Location, Integer>();
+        towers = new HashMap<Location, String>();
 
         //Obtenemos la tecnología con la que vamos a trabajar
         Bundle extras = getIntent().getExtras();
@@ -202,21 +224,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 saveTowers();
             }
         });
-
-        //Listener para Mostrar torres
-        Button showtowers = findViewById(R.id.showTowers);
-        showtowers.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showTowers();
-            }
-        });
-
-
-
-
-
-
       /*  IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
 
         //Manejamos las acciones de encendido y apagado de pantalla
@@ -250,6 +257,38 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+
+        /*Necesario para poder tener InfoWindow personalizados
+        Cuando el usuario pulsa sobre un circulo que representa a una torre se despliega la
+        información de la torre.*/
+        mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter() {
+
+            @Override
+            public View getInfoWindow(Marker arg0) {
+                return null;
+            }
+
+            @Override
+            public View getInfoContents(Marker marker) {
+                //Habilitamos los InfoWindow multilínea (el Infowindow por defecto no lo permite)
+                LinearLayout info = new LinearLayout(getApplicationContext());
+                info.setOrientation(LinearLayout.VERTICAL);
+
+                TextView title = new TextView(getApplicationContext());
+                title.setTextColor(Color.BLACK);
+                title.setGravity(Gravity.CENTER);
+                title.setTypeface(null, Typeface.BOLD);
+                title.setText(marker.getTitle());
+
+                TextView snippet = new TextView(getApplicationContext());
+                snippet.setTextColor(Color.GRAY);
+                snippet.setText(marker.getSnippet());
+
+                info.addView(title);
+                info.addView(snippet);
+                return info;
+            }
+        });
         //Utilizamos la ubicación actual del dispositivo.
         Log.e("DEBUG", "Launching startShowingCurrentLocation().");
         Log.e("DEBUG", "Starting to show current location.");
@@ -257,6 +296,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         startShowingCurrentLocation();
     }
 
+    /* Comprueba los permisos de la aplicación: No solicita todos cada vez, solo los faltantes.
+    Si el usuario ya dio un permiso anteriormente este no se pide.
+     */
     public void checkPermissions() {
         Log.e("DEBUG", "Checking permissions");
         List<String> permissions = new ArrayList<String>();
@@ -264,7 +306,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_PHONE_STATE)) {
             } else permissions.add(Manifest.permission.READ_PHONE_STATE);
         }
-
 
         if ((ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
@@ -282,7 +323,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             } else permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
 
-
         if (permissions.size() != 0) {
             String[] stringArray = permissions.toArray(new String[0]);
             ActivityCompat.requestPermissions(this, stringArray
@@ -293,7 +333,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         coarse_permissions_granted = true;
         writeExternal_granted = true;
         fine_permissions_granted = true;
-
         Log.e("DEBUG", "Permissions check has finished.");
     }
 
@@ -354,6 +393,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    /* Cuando la aplicación es pausada: pantalla bloqueada o salir de la app sin cerrar desactivamos las actualizaciones
+    de ubicación */
     @Override
     protected void onPause() {
         super.onPause();
@@ -407,17 +448,39 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
         Circle circle = mMap.addCircle(new CircleOptions()
                 .center(new LatLng(location.getLatitude(), location.getLongitude()))
-                .radius(5)
-                .strokeColor(c)
+                .radius(10)
+                .strokeColor(Color.BLACK)
+                .strokeWidth(2)
                 .fillColor(c));
     }
 
-    private void drawTowerOnMap(Location location) {
+    private void drawTowerOnMap(Location location, int mcc, int mnc, int lac, int cellid, int level) {
         Circle circle = mMap.addCircle(new CircleOptions()
                 .center(new LatLng(location.getLatitude(), location.getLongitude()))
-                .radius(5)
-                .strokeColor(Color.CYAN)
-                .fillColor(Color.CYAN));
+                .radius(50)
+                .clickable(true)
+                .strokeColor(Color.BLACK)
+                .strokeWidth(2)
+                .fillColor(Color.DKGRAY));
+
+        Bitmap b = BitmapFactory.decodeResource(getResources(), R.drawable.android);
+        Bitmap smallMarker = Bitmap.createScaledBitmap(b, 1, 1, false);
+        BitmapDescriptor smallMarkerIcon = BitmapDescriptorFactory.fromBitmap(smallMarker);
+        mMap.addMarker(new MarkerOptions()
+                .position(new LatLng(location.getLatitude(), location.getLongitude()))
+                .alpha(0)
+                .title("Tower")
+                .snippet("Latitude: " + location.getLatitude() + "\n" + "Longitude: " + location.getLongitude()
+                                        + "\n" + "mcc: " + mcc + "\n" + "mnc: " + mnc + "\n"
+                                        + "cellid: " + cellid + "\n" + "Signal strength level: " + level)
+                .icon(smallMarkerIcon));
+        mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                marker.showInfoWindow();
+                return true;
+            }
+        });
     }
 
     /*
@@ -448,7 +511,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             List<Integer> signalStrenght = new ArrayList<Integer>();
             for (CellInfo info : cellInfoList) {
                 //Get 2G info
-                if (info instanceof CellInfoWcdma && TECH == 1) {
+                if (info instanceof CellInfoWcdma && TECH == 2) {
                     CellInfoWcdma infoWcdma = (CellInfoWcdma) info;
                     CellIdentityWcdma id = infoWcdma.getCellIdentity();
 
@@ -459,9 +522,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     text.append("} Level:  ").append(infoWcdma.getCellSignalStrength().getLevel())
                             .append("\n");
                     signalStrenght.add(infoWcdma.getCellSignalStrength().getLevel());
+                    getGet(id.getMcc(), id.getMnc(), id.getLac(), id.getCid()
+                            , infoWcdma.getCellSignalStrength().getLevel());
                 }
                 //Get 3G info
-                else if (info instanceof CellInfoLte && TECH == 2) {
+                else if (info instanceof CellInfoLte && TECH == 3) {
                     CellInfoLte infoLte = (CellInfoLte) info;
                     CellIdentityLte id = infoLte.getCellIdentity();
 
@@ -472,9 +537,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     text.append("} Level:  ").append(infoLte.getCellSignalStrength().getLevel())
                             .append("\n");
                     signalStrenght.add(infoLte.getCellSignalStrength().getLevel());
+                    getGet(id.getMcc(), id.getMnc(), id.getTac(), id.getCi()
+                            , infoLte.getCellSignalStrength().getLevel());
                 }
                 //Get 4G info
-                else if (info instanceof CellInfoGsm && TECH == 3) {
+                else if (info instanceof CellInfoGsm && TECH == 1) {
                     CellInfoGsm infoGsm = (CellInfoGsm) info;
                     CellIdentityGsm id = infoGsm.getCellIdentity();
 
@@ -485,6 +552,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     text.append("} Level:  ").append(infoGsm.getCellSignalStrength().getLevel())
                             .append("\n");
                     signalStrenght.add(infoGsm.getCellSignalStrength().getLevel());
+                    getGet(id.getMcc(), id.getMnc(), id.getLac(), id.getCid(),
+                            infoGsm.getCellSignalStrength().getLevel());
                 }
             }
             //Si no hay elementos en la lista puede ser que no esté activa la tecnologia o que no haya ninguna antena cerca
@@ -510,6 +579,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }*/
 
+    /* Cuando la aplicación se reanuda comprobamos si el switch del gps estaba activado. Si lo estaba entonces volvemos a solicitar
+    las actualizaciones de ubicación (cuando la app se para las actualizaciones también)
+     */
     @Override
     protected void onResume() {
         super.onResume();
@@ -517,6 +589,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             startLocationUpdates();
     }
 
+    /* Método auxiliar para guardar la información recolectada por la app. Guarda tanto las ubicaciones del usuario y el nivel de señal
+    de cada una de ellas, como las ubicaciones y la información asociada a las torres de telefonía encontrada
+    El formato es un csv:
+        Technology Used: 2/3/4G
+        Longitude1:Latitude1
+        Longitude2:Latitude2
+        ...
+        LongitudeN:LatitudeN
+        Towers
+        Longitude1;Latitude1;mcc1;mnc1;lac1;cellid1;levelstrenght1
+        Longitude2:Latitude2;mcc2;mnc2;lac2;cellid2;levelstrenght2
+        ...
+        LongitudeN:LatitudeN;mccN;mncN;lacN;cellidN;levelstrenghtN
+     */
     private void saveTowers() {
         //Si no hay puntos o solo hay 1 no se guarda
         //Solo guardamos si tenemos permisos para hacerlo
@@ -538,6 +624,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 for (Map.Entry<Location, Integer> entry : locations.entrySet()) {
                     writer.append(entry.getKey().getLatitude() + ":" + entry.getKey().getLongitude() + ";" + entry.getValue() + "\n");
                 }
+                if (towers.size() >  0) {
+                    writer.append("Towers\n");
+                    for (Map.Entry<Location, String> entry : towers.entrySet()) {
+                        writer.append(entry.getKey().getLatitude() + ";" + entry.getKey().getLongitude() + ";" + entry.getValue() + "\n");
+                    }
+                }
                 writer.flush();
                 writer.close();
             } catch (Exception e) {
@@ -553,81 +645,40 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void showTowers() {
-        TelephonyManager telephonyManager = (TelephonyManager) getApplicationContext()
-                .getSystemService(Context.TELEPHONY_SERVICE);
-        List<CellInfo> cellInfoList = telephonyManager.getAllCellInfo();
-        List<Integer> signalStrenght = new ArrayList<Integer>();
-
-        String peticion = "https://api.mylnikov.org/geolocation/cell?v=1.1&data=open";
-        for (CellInfo info : cellInfoList) {
-            //Get 2G info
-            if (info instanceof CellInfoWcdma && TECH == 1) {
-                CellInfoWcdma infoWcdma = (CellInfoWcdma) info;
-                CellIdentityWcdma id = infoWcdma.getCellIdentity();
-                peticion += "&mcc=" + id.getMcc() + "&mnc=" + id.getMnc() + "&lac=" + id.getLac() + "&cellid=" + id.getCid();
-                getGet(peticion);
-            }
-            //Get 3G info
-            else if (info instanceof CellInfoLte && TECH == 2) {
-                CellInfoLte infoLte = (CellInfoLte) info;
-                CellIdentityLte id = infoLte.getCellIdentity();
-                peticion += "&mcc=" + id.getMcc() + "&mnc=" + id.getMnc() + "&lac=" + id.getTac() + "&cellid=" + id.getCi();
-                getGet(peticion);
-
-            }
-            //Get 4G info
-            else if (info instanceof CellInfoGsm && TECH == 3) {
-                CellInfoGsm infoGsm = (CellInfoGsm) info;
-                CellIdentityGsm id = infoGsm.getCellIdentity();
-
-                peticion += "&mcc=" + id.getMcc() + "&mnc=" + id.getMnc() + "&lac=" + id.getLac() + "&cellid=" + id.getCid(); //id.getMncString()
-
-                getGet(peticion);
-            } else {
-                //No tenemos permisos y por tanto la funcionalidad no es accesible
-                CellIdentityGsm id = null;
-                Toast.makeText(MapsActivity.this, "Necesitas dar los permisos necesarios.", Toast.LENGTH_SHORT).show();
-            }
-
-
-        }
-    }
-
-    private void getGet(String url){
-        Log.e("DEBUG", url);
+    private void getGet(int mcc, int mnc, int lac, int cellid, int level){
+        Log.e("DEBUG", mcc + ":" + mnc + ":" + lac + ":" + cellid);
+        Log.e("DEBUG", mylnikovURL);
         Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(url)
+                .baseUrl(mylnikovURL)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
 
         mylnikov mylnikov = retrofit.create(inf.um.comov.mylnikov.class);
 
-        retrofit2.Call<List<Get>> call = mylnikov.getGet();
-
-        Log.e("DEBUG", "LLega");
-        call.enqueue(new Callback<List<Get>>() {
-            @Override
-            public void onResponse(retrofit2.Call<List<Get>> call, Response<List<Get>> response) {
-                if(!response.isSuccessful()){
-                    tower.setText("Código: " + response.code());
-                    return;
-                }
-                List<Get> getList = response.body();
-
-                for(Get get: getList){
-                    Location locationTower = new Location("");
-                    locationTower.setLatitude(get.getLat());
-                    locationTower.setLongitude(get.getLon());
-                    drawTowerOnMap(locationTower);
-                }
+        Call<JsonObject> call = mylnikov.getGet("1.1", "open", mcc, mnc, lac, cellid);
+        call.enqueue(new Callback<JsonObject>() {
+         @Override
+         public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
+             JsonObject object = response.body();
+             if (response.isSuccessful() && object.get("result").toString().equals("200")) {
+                 JsonObject data = (JsonObject) object.get("data");
+                 String lon = data.get("lon").toString();
+                 String lat = data.get("lat").toString();
+                 Location l = new Location("");
+                 String s = Integer.toString(mcc) + ";" + Integer.toString(mnc)  + ";" + Integer.toString(lac)  + ";" + Integer.toString(cellid) + ";" + Integer.toString(level);
+                 Log.e("DEBUG", s);
+                 Log.e("DEBUG", lon +  ":"  + lat + ":" + s);
+                 l.setLongitude(Double.parseDouble(lon));
+                 l.setLatitude(Double.parseDouble(lat));
+                 towers.put(l, s);
+                 drawTowerOnMap(l, mcc, mnc, lac, cellid, level);
             }
+         }
 
-            @Override
-            public void onFailure(retrofit2.Call<List<Get>> call, Throwable t) {
-                tower.setText(t.getMessage());
-            }
+         @Override
+         public void onFailure(Call<JsonObject> call, Throwable t) {
+             Log.e("DEBUG", "Se ha producido un error al solicitar la ubicación de la torre");
+         }
         });
     }
-
 }

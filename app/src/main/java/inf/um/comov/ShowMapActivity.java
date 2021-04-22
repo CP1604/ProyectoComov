@@ -6,20 +6,30 @@ import androidx.fragment.app.FragmentActivity;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import java.io.BufferedReader;
@@ -66,12 +76,41 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter() {
+
+            @Override
+            public View getInfoWindow(Marker arg0) {
+                return null;
+            }
+
+            @Override
+            public View getInfoContents(Marker marker) {
+
+                LinearLayout info = new LinearLayout(getApplicationContext());
+                info.setOrientation(LinearLayout.VERTICAL);
+
+                TextView title = new TextView(getApplicationContext());
+                title.setTextColor(Color.BLACK);
+                title.setGravity(Gravity.CENTER);
+                title.setTypeface(null, Typeface.BOLD);
+                title.setText(marker.getTitle());
+
+                TextView snippet = new TextView(getApplicationContext());
+                snippet.setTextColor(Color.GRAY);
+                snippet.setText(marker.getSnippet());
+
+                info.addView(title);
+                info.addView(snippet);
+
+                return info;
+            }
+        });
         checkPermissions();
         processFile();
         // Add a marker in Sydney and move the camera
         if (readExternalStorage_granted) {
             LatLng point = new LatLng(location.getLatitude(), location.getLongitude());
-            mMap.addMarker(new MarkerOptions().position(point).title(point.latitude + " : " + point.longitude));
+            mMap.addMarker(new MarkerOptions().position(point).title(point.latitude + " : " + point.longitude).alpha(0));
             mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 14));
         }
     }
@@ -92,14 +131,22 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
                 this.location = null;
                 return;
             }
-            //Si el fichero se ha podido abrir correctament lo leemos
+            //Si el fichero se ha podido abrir correctamente lo leemos
             try {
                 String strLine;
                 Location l = null;
                 strLine = br.readLine();
-                if (strLine != null)
+                if (strLine != null) {
                     Log.d("DEBUG", strLine);
-                strLine = br.readLine();
+                    TextView tv = findViewById(R.id.technology);
+                    tv.append(": " + strLine);
+                    strLine = br.readLine();
+                }
+                else {
+                    TextView tv = findViewById(R.id.technology);
+                    tv.append(": None");
+                    return;
+                }
 
                 if (strLine != null) {
                     Log.d("DEBUG", strLine);
@@ -109,12 +156,12 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
                     l = new Location("");
                     l.setLongitude(Double.parseDouble(campos2[1]));
                     l.setLatitude(Double.parseDouble(campos2[0]));
+                    location = l;
                     drawCircleOnMap(l, v);
-                    this.location = l;
+                    strLine = br.readLine();
                 }
-                strLine = br.readLine();
 
-                while (strLine != null) {
+                while (strLine != null && ! strLine.equals("Towers")) {
                     Log.d("DEBUG", strLine);
                     String[] campos = strLine.split(";");
                     int v = Integer.parseInt(campos[1]);
@@ -125,6 +172,25 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
                     drawCircleOnMap(l, v);
                     strLine = br.readLine();
                 }
+
+                if (strLine != null) {
+                    strLine = br.readLine();
+                    while (strLine != null) {
+                        Log.d("DEBUG", strLine);
+                        String[] campos = strLine.split(";");
+                        l = new Location("");
+                        l.setLongitude(Double.parseDouble(campos[1]));
+                        l.setLatitude(Double.parseDouble(campos[0]));
+                        int mcc = Integer.parseInt(campos[2]);
+                        int mnc = Integer.parseInt(campos[3]);
+                        int lac = Integer.parseInt(campos[4]);
+                        int cellid = Integer.parseInt(campos[5]);
+                        int level = Integer.parseInt(campos[6]);
+                        drawTowerOnMap(l, mcc, mnc, lac, cellid, level);
+                        strLine = br.readLine();
+                    }
+                }
+
             } catch (Exception e) {
                 //Capturamos excepciones que se producen por errores de IO o de formato de fichero incorrecto
                 Toast.makeText(ShowMapActivity.this, "Se ha producido un error al leer el fichero."
@@ -161,9 +227,40 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
         }
         Circle circle = mMap.addCircle(new CircleOptions()
                 .center(new LatLng(location.getLatitude(), location.getLongitude()))
-                .radius(5)
+                .radius(10)
                 .strokeColor(c)
+                .strokeColor(Color.BLACK)
+                .strokeWidth(2)
                 .fillColor(c));
+    }
+
+    private void drawTowerOnMap(Location location, int mcc, int mnc, int lac, int cellid, int level) {
+        Circle circle = mMap.addCircle(new CircleOptions()
+                .center(new LatLng(location.getLatitude(), location.getLongitude()))
+                .radius(50)
+                .clickable(true)
+                .strokeColor(Color.BLACK)
+                .strokeWidth(2)
+                .fillColor(Color.DKGRAY));
+
+        Bitmap b = BitmapFactory.decodeResource(getResources(), R.drawable.android);
+        Bitmap smallMarker = Bitmap.createScaledBitmap(b, 1, 1, false);
+        BitmapDescriptor smallMarkerIcon = BitmapDescriptorFactory.fromBitmap(smallMarker);
+        mMap.addMarker(new MarkerOptions()
+                .position(new LatLng(location.getLatitude(), location.getLongitude()))
+                .alpha(0)
+                .title("Tower")
+                .snippet("Latitude: " + location.getLatitude() + "\n" + "Longitude: " + location.getLongitude()
+                        + "\n" + "mcc: " + mcc + "\n" + "mnc: " + mnc + "\n"
+                        + "cellid: " + cellid + "\n" + "Signal strength level: " + level)
+                .icon(smallMarkerIcon));
+        mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                marker.showInfoWindow();
+                return true;
+            }
+        });
     }
 
     public void checkPermissions() {

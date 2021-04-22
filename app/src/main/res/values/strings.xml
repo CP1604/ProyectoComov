@@ -6,6 +6,8 @@
     <string name="title_activity_maps">Map</string>
     <string name="towersButton">Save Towers</string>
     <string name="gpsText">GPS disabled</string>
-    <string name="title_activity_show_map">Map</string>
+    <string name="title_activity_show_map" translatable="false">Map</string>
     <string name="Find_towers">Find towers</string>
+    <string name="Technology">Technology Used</string>
+    <string name="gps_switch" translatable="false">GPS</string>
 </resources>

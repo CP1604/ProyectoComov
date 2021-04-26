@@ -5,6 +5,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -109,9 +110,10 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
         processFile();
         // Add a marker in Sydney and move the camera
         if (readExternalStorage_granted) {
-            LatLng point = new LatLng(location.getLatitude(), location.getLongitude());
-            mMap.addMarker(new MarkerOptions().position(point).title(point.latitude + " : " + point.longitude).alpha(0));
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 14));
+            if (location != null) {
+                LatLng point = new LatLng(location.getLatitude(), location.getLongitude());
+                mMap.addMarker(new MarkerOptions().position(point).title(point.latitude + " : " + point.longitude).alpha(0));
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(point, 14));}
         }
     }
 
@@ -125,10 +127,13 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
                 File dir = new File(root + "/saved_maps");
                 br = new BufferedReader(new FileReader(dir + "/" + fichero));
             }
-            catch (FileNotFoundException e) {
+            catch (Exception e) {
                 Toast.makeText(ShowMapActivity.this, "El fichero no existe o no se encuentra en el " +
                         "directorio de la aplicación.",  Toast.LENGTH_SHORT).show();
                 this.location = null;
+                Intent intent = new Intent(ShowMapActivity.this, MainActivity.class);
+                startActivity(intent);
+                finish();
                 return;
             }
             //Si el fichero se ha podido abrir correctamente lo leemos

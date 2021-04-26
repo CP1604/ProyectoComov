@@ -27,7 +27,7 @@
         android:onClick="onClickSaveTowers"
         android:text="@string/towersButton" />
 
-    <SwitchCompat
+    <Switch
         android:id="@+id/enableGPS"
         android:layout_width="wrap_content"
         android:layout_height="12dp"

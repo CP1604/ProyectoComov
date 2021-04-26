@@ -191,6 +191,9 @@ public class ShowMapActivity extends FragmentActivity implements OnMapReadyCallb
                     }
                 }
 
+                Toast.makeText(ShowMapActivity.this, "Mapa cargado correctamente."
+                        , Toast.LENGTH_SHORT).show();
+
             } catch (Exception e) {
                 //Capturamos excepciones que se producen por errores de IO o de formato de fichero incorrecto
                 Toast.makeText(ShowMapActivity.this, "Se ha producido un error al leer el fichero."

@@ -632,6 +632,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 }
                 writer.flush();
                 writer.close();
+                Toast.makeText(MapsActivity.this, "Fichero " + name + " guardado correctamente."
+                        , Toast.LENGTH_SHORT).show();
             } catch (Exception e) {
                 Toast.makeText(MapsActivity.this, "Se ha producido un error al escribir el fichero."
                         , Toast.LENGTH_SHORT).show();
